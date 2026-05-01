@@ -3,6 +3,13 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+docs/
+skills/
+tasks/
+gemini.md
+.env
+run-skill.ps1
+run-tasks.ps1
 
 ### STS ###
 .apt_generated

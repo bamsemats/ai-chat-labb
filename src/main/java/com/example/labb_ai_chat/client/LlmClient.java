@@ -7,8 +7,8 @@ import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.retry.support.RetrySynchronizationManager;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -16,15 +16,15 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public class LlmClient {
 
-    private final WebClient webClient;
+    private final RestClient restClient;
     private final String model;
 
-    public LlmClient(WebClient.Builder webClientBuilder,
+    public LlmClient(RestClient.Builder restClientBuilder,
                      @Value("${openai.api.key:${OPENAI_API_KEY:}}") String apiKey,
                      @Value("${openai.api.url:https://openrouter.ai/api/v1}") String baseUrl,
                      @Value("${openai.model:google/gemini-2.0-flash-001}") String model) {
 
-        this.webClient = webClientBuilder
+        this.restClient = restClientBuilder
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .build();
@@ -33,7 +33,7 @@ public class LlmClient {
     }
 
     @Retryable(
-            retryFor = { WebClientResponseException.class },
+            retryFor = { RestClientResponseException.class },
             noRetryFor = { NonRetryableException.class },
             maxAttempts = 4,
             backoff = @Backoff(delay = 1)
@@ -42,7 +42,7 @@ public class LlmClient {
         try {
             return doCall(messages);
 
-        } catch (WebClientResponseException ex) {
+        } catch (RestClientResponseException ex) {
 
             if (!isRetryable(ex)) {
                 throw new NonRetryableException("Non-retryable HTTP error", ex);
@@ -61,12 +61,11 @@ public class LlmClient {
     private String doCall(List<Message> messages) {
         OpenAiRequest request = new OpenAiRequest(model, messages);
 
-        OpenAiResponse response = webClient.post()
+        OpenAiResponse response = restClient.post()
                 .uri("/chat/completions")
-                .bodyValue(request)
+                .body(request)
                 .retrieve()
-                .bodyToMono(OpenAiResponse.class)
-                .block();
+                .body(OpenAiResponse.class);
 
         if (response != null && !response.choices().isEmpty()) {
             return response.choices().get(0).message().content();
@@ -75,7 +74,7 @@ public class LlmClient {
         throw new RuntimeException("Empty response from API");
     }
 
-    private boolean isRetryable(WebClientResponseException ex) {
+    private boolean isRetryable(RestClientResponseException ex) {
         int status = ex.getStatusCode().value();
         return status == 429 || (status >= 500 && status <= 504);
     }
@@ -85,9 +84,9 @@ public class LlmClient {
         return (context != null) ? context.getRetryCount() : 0;
     }
 
-    private long resolveDelay(WebClientResponseException ex, int attempt) {
+    private long resolveDelay(RestClientResponseException ex, int attempt) {
 
-        String retryAfter = ex.getHeaders().getFirst("Retry-After");
+        String retryAfter = ex.getResponseHeaders().getFirst("Retry-After");
         if (retryAfter != null) {
             try {
                 return Long.parseLong(retryAfter) * 1000;
@@ -112,9 +111,9 @@ public class LlmClient {
         }
     }
 
-    private void logRetry(WebClientResponseException ex, int attempt, long delay) {
+    private void logRetry(RestClientResponseException ex, int attempt, long delay) {
         System.out.printf(
-                "Retry #%d in %d ms بسبب status %d%n",
+                "Retry #%d in %d ms due to status %d%n",
                 attempt,
                 delay,
                 ex.getStatusCode().value()
@@ -123,7 +122,7 @@ public class LlmClient {
 
 
     @Recover
-    public String recover(WebClientResponseException ex, List<Message> messages) {
+    public String recover(RestClientResponseException ex, List<Message> messages) {
         return "Tjänsten är tillfälligt överbelastad. Försök igen om en stund.";
     }
 

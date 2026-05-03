@@ -19,7 +19,7 @@ This application is a Spring Boot-based middleware that allows users to interact
 ## 🛠️ Tech Stack
 - **Java 21/26**
 - **Spring Boot 3.4.1**
-- **Spring WebFlux** (WebClient for async communication)
+- **Spring Web** (RestClient for HTTP communication)
 - **Spring Retry** (Resilience)
 - **Springdoc-OpenAPI** (Swagger UI)
 - **Mockito & MockMvc** (Testing)
